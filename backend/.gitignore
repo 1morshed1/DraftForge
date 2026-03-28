@@ -64,7 +64,11 @@ Thumbs.db
 *.swo
 *~
 
-# AI
+# Runtime logs
+*.log
+logs/
+
+# AI / editor-local (keep out of git)
 .cursor/
 memory-bank/
 claude.md
