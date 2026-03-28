@@ -1,4 +1,4 @@
-# Legal Document Processor
+# DraftForge
 
 An AI-powered system for processing messy legal documents, extracting structured information, generating grounded draft outputs, and continuously improving from operator edits.
 
@@ -14,17 +14,19 @@ Built for the Pearson Specter Litt AI Engineer assessment.
 
 ```bash
 # 1. Clone and enter the project
-cd legal-doc-processor
+git clone <repo-url>
+cd DraftForge
 
 # 2. Set your Gemini API key
-cp .env.example .env
-# Edit .env and add your GEMINI_API_KEY
+cp backend/.env.example backend/.env
+# Edit backend/.env and add your GEMINI_API_KEY
 
 # 3. Build and run
-docker-compose up --build
+docker compose up --build
 
 # 4. Open the UI
-# → http://localhost:3000
+# Frontend → http://localhost:3000
+# Backend API docs → http://localhost:8000/docs
 ```
 
 ### First Steps
@@ -49,22 +51,8 @@ See [ARCHITECTURE.md](./ARCHITECTURE.md) for the full system diagram and data fl
 
 ## Implementation Guides
 
-- [Backend Implementation](./BACKEND_IMPLEMENTATION.md) — service layer, API design, algorithms
-- [Frontend Implementation](./FRONTEND_IMPLEMENTATION.md) — React components, pages, UX flows
-
----
-
-## Sample Documents
-
-The system ships with 5 mock legal documents demonstrating different input challenges:
-
-| Document | Type | Challenge |
-|---|---|---|
-| `lease_agreement.pdf` | PDF with extractable text | Multi-page, structured legal language |
-| `handwritten_note.png` | Scanned image | Simulated handwriting, noise, low quality |
-| `case_filing.txt` | Text with OCR artifacts | Garbled characters, broken line breaks |
-| `property_deed.pdf` | PDF (scanned look) | Degraded quality, scan artifacts |
-| `notice_letter.txt` | Clean text | Baseline — tests direct text reading |
+- [Backend Implementation](./backend/BACKEND_IMPLEMENTATION.md) — service layer, API design, algorithms
+- [Frontend Implementation](./frontend/FRONTEND_IMPLEMENTATION.md) — React components, pages, UX flows
 
 ---
 
@@ -91,116 +79,75 @@ Interactive docs available at `http://localhost:8000/docs` (Swagger UI).
 
 ---
 
-## Evaluation Approach & Results
+## How to Evaluate
+
+Below is a walkthrough to verify each capability end-to-end.
 
 ### 1. Document Processing (25 pts)
 
-**What we test:**
-- PDF text extraction accuracy (compare extracted text to known content)
-- OCR fallback triggers correctly for image-only pages
-- Text cleaning removes artifacts without losing content
-- Structured data extraction catches dates, case numbers, parties, amounts
-- Chunking produces reasonable sizes with proper overlap
+The hybrid extraction pipeline handles native PDFs, scanned images, and raw text files:
 
-**How to verify:**
 ```bash
-# Upload a sample and check extraction
-curl -X POST http://localhost:8000/api/documents/upload -F "file=@sample_documents/lease_agreement.pdf"
-# → Check confidence_score, extraction_method, word_count in response
-
-# Inspect structured data
-curl http://localhost:8000/api/documents/{doc_id}
-# → Check structured_data.dates_found, parties, monetary_amounts
+# Upload a sample and inspect the response
+curl -X POST http://localhost:8000/api/documents/upload \
+  -F "file=@sample_documents/lease_agreement.pdf"
 ```
 
-**Expected results:**
-- Native PDFs: confidence ≥ 0.90, method = "text_extraction"
-- Scanned/image docs: confidence 0.5-0.85, method = "ocr"
-- Text files: confidence = 1.0, method = "direct_read"
-- All documents produce chunks in the 300-600 character range
+| Input type | Expected confidence | Extraction method |
+|---|---|---|
+| Native PDF | ≥ 0.90 | `text_extraction` |
+| Scanned/image | 0.5–0.85 | `ocr` |
+| Plain text | 1.0 | `direct_read` |
+
+All documents produce paragraph-aware chunks in the 300–600 character range. Structured metadata (dates, parties, amounts) is available via `GET /api/documents/{doc_id}`.
 
 ### 2. Retrieval & Grounding (25 pts)
 
-**What we test:**
-- Relevant chunks rank highest for domain queries
-- Irrelevant chunks score low
-- doc_ids filtering works correctly
-- Generated drafts cite specific sources with [Source N] references
-- No hallucinated information in drafts
+Semantic search uses L2-normalized MiniLM embeddings with FAISS cosine similarity. Drafts are grounded with `[Source N]` citations linked back to retrieved chunks.
 
-**How to verify:**
 ```bash
-# Search for a specific topic
+# Semantic search
 curl -X POST http://localhost:8000/api/retrieval/search \
   -H "Content-Type: application/json" \
   -d '{"query": "monthly rent amount", "top_k": 3}'
-# → Top result should be from lease_agreement, mentioning $2,450
+# → Top results come from the lease agreement, mentioning $2,450
 
-# Generate a draft and check citations
+# Generate a grounded draft
 curl -X POST http://localhost:8000/api/drafts/generate \
   -H "Content-Type: application/json" \
   -d '{"draft_type": "case_summary"}'
-# → Response includes citations array with chunk_ids and relevance_scores
-# → Draft content uses [Source N] references
+# → Response includes citations with chunk_ids and relevance_scores
 ```
-
-**Expected results:**
-- Top-3 results for "rent amount" should all come from the lease agreement
-- Draft citations match the chunks used for context
-- No claims in the draft without a corresponding source
 
 ### 3. Draft Quality (10 pts)
 
-**What we test:**
-- Output follows the requested structure (sections match draft type)
-- Content is relevant to the documents
-- Language is appropriate for legal context
-- Draft is usable as a first-pass document
-
-**How to verify:**
-- Generate each of the 5 draft types
-- Check that section headers match the expected structure
-- Verify key facts from source documents appear in the draft
-- Read for coherence and professional tone
+Five draft types are supported (case summary, internal memo, client letter, contract review, compliance report). Each follows a structured template with professional legal tone. Best verified through the UI — generate a draft on the Drafts page and review the output.
 
 ### 4. Improvement from Edits (25 pts)
 
-**What we test:**
-- Edit diffs are computed correctly
-- Edit categories are classified reasonably
-- Rules are generated from edits
-- Repeated similar edits boost rule confidence
-- Future drafts actually change when rules are applied
+This is the core feedback loop. To see it in action:
 
-**How to verify — the "before and after" test:**
-```
-Step 1: Generate a case_summary draft (no rules yet)
-Step 2: Edit it — make it more formal, add jurisdiction info, fix a date
-Step 3: Submit the edit
-Step 4: Check /api/improvements/dashboard → should show new rules
-Step 5: Generate another case_summary draft (rules now applied)
-Step 6: Compare — the new draft should reflect the edits:
-        - More formal tone
-        - Jurisdiction included
-        - Dates more carefully cited
-```
+1. Generate a `case_summary` draft (no rules exist yet)
+2. Click **Edit This Draft**, make changes — formalize language, add jurisdiction info, fix a date
+3. Submit the edit
+4. Visit the **Improvements** page — new rules appear with categories and confidence scores
+5. Generate another `case_summary` — the new draft reflects your edits (more formal tone, jurisdiction included, etc.)
 
-This is the most important test. The before/after comparison should show visible improvement.
+Repeated similar edits boost rule confidence. Rules are injected into the system prompt for future generations.
 
 ### 5. Code Quality (10 pts)
 
-- **Modular:** Each service is independent, injected via app.state
-- **Error handling:** Try/except around OCR, API calls, file operations
-- **Type safety:** Pydantic models for all request/response schemas
+- **Modular:** Each service is independent, injected via `app.state` through a lifespan handler
+- **Error handling:** Try/except around OCR, Gemini API calls, and file I/O with clear HTTP error responses
+- **Type safety:** Pydantic v2 models for all request/response schemas
 - **Logging:** Structured logging in each service
-- **Clean separation:** API routes → services → data layer
+- **Clean separation:** API routes → service layer → data/storage layer
 
 ### 6. Documentation (5 pts)
 
-- This README
-- Architecture overview with diagrams
-- Detailed implementation guides for backend and frontend
-- Inline code comments for non-obvious logic
+- This README with quick start, API reference, and evaluation guide
+- [Architecture overview](./ARCHITECTURE.md) with system diagrams and data flow
+- Detailed implementation guides for [backend](./backend/BACKEND_IMPLEMENTATION.md) and [frontend](./frontend/FRONTEND_IMPLEMENTATION.md)
 - `.env.example` for configuration
 
 ---
@@ -224,18 +171,22 @@ This is the most important test. The before/after comparison should show visible
 ### Backend
 ```bash
 cd backend
-python -m venv venv
-source venv/bin/activate
+python -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
 
 # System dependencies (Ubuntu/Debian)
 sudo apt-get install tesseract-ocr tesseract-ocr-eng poppler-utils
 
+# Set up environment
+cp .env.example .env
+# Edit .env and add your GEMINI_API_KEY
+
 # Generate sample docs
 python scripts/generate_samples.py
 
 # Run
-GEMINI_API_KEY=your_key uvicorn app.main:app --reload --port 8000
+uvicorn app.main:app --reload --port 8000
 ```
 
 ### Frontend

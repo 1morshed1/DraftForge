@@ -19,6 +19,10 @@ COPY . .
 # Create data directories
 RUN mkdir -p /app/data/uploads /app/data/extracted /app/data/faiss_indexes \
     /app/data/edits /app/data/patterns
+
+# Generate sample documents so "Load Samples" works out of the box
+RUN python scripts/generate_samples.py
+
 EXPOSE 8000
 
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
