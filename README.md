@@ -39,6 +39,31 @@ docker compose up --build
 
 ---
 
+## Screenshots
+
+### Documents — Upload and Process
+Upload legal documents (PDFs, images, text files) and view extraction results with confidence scores.
+
+![Documents Page](screenshots/documents.png)
+
+### Draft Generator — Configure and Generate
+Select a draft type, choose source documents, add custom instructions, and generate grounded drafts.
+
+![Draft Generator](screenshots/draft-generator.png)
+
+### Draft Viewer — Review with Citations
+View generated drafts with `[Source N]` citations linked back to retrieved evidence. Edit inline and submit changes.
+
+![Draft View](screenshots/draft-view-1.png)
+![Draft View continued](screenshots/draft-view-2.png)
+
+### Improvements Dashboard — Learn from Edits
+Track learned rules, view edit history, and see how operator feedback improves future outputs.
+
+![Improvements Dashboard](screenshots/improvements.png)
+
+---
+
 ## Architecture
 
 See [ARCHITECTURE.md](./ARCHITECTURE.md) for the full system diagram and data flow.
